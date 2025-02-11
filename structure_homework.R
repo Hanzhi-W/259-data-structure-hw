@@ -38,8 +38,10 @@ load("rs_data.RData")
 # Why did some of the artist-song fail to match up?
 
 #ANSWER
-
-
+rs_joined_orig <- full_join(rs_new, rs_old, by = c("Song", "Artist") )
+nrow(rs_joined_orig)
+# Yes, I noticed there are songs and artists that should have been matched but turned out to be different. For example, "Let's Stay Together" by Al Green. 
+# The reason is how they're written is different, e.g., their quotation mark is different.
 
 ### Question 2 ---------- 
 
@@ -50,7 +52,15 @@ load("rs_data.RData")
 # Make Rank and Year into integer variables for rs_old before binding them into rs_all
 
 #ANSWER
+rs_new <- rs_new %>% 
+  mutate(Source = "New")
+rs_old <- rs_old %>% 
+  mutate(Source = "Old")
+rs_all <- bind_rows(rs_new, rs_old)
 
+rs_old <- rs_old %>% 
+  mutate (Rank = as.integer(Rank), Year = as.integer(Year))
+rs_all <- bind_rows(rs_new, rs_old)
 
 ### Question 3 ----------
 
@@ -62,7 +72,41 @@ load("rs_data.RData")
 # Use both functions to make all artists/song lowercase and remove any extra spaces
 
 #ANSWER
+rs_new <- rs_new %>% 
+  mutate(Artist = str_remove_all(Artist, "The"),
+         Song = str_remove_all(Song, "The")) %>% 
+  mutate(Artist = str_replace_all(Artist, "&", "and"),
+         Song = str_replace_all(Song, "&", "and")) %>% 
+  mutate(Artist = str_remove_all(Artist, "[:punct:]"),
+         Song = str_remove_all(Song, "[:punct:]")) %>% 
+  mutate(Artist = str_to_lower(Artist, local = "en"),
+         Song = str_to_lower(Song, local = "en")) %>% 
+  mutate(Artist = str_trim(Artist, side = c("both", "left", "right")),
+         Song = str_trim(Song, side = c("both", "left", "right")))
 
+rs_old <- rs_old %>% 
+  mutate(Artist = str_remove_all(Artist, "The"),
+         Song = str_remove_all(Song, "The")) %>% 
+  mutate(Artist = str_replace_all(Artist, "&", "and"),
+         Song = str_replace_all(Song, "&", "and")) %>% 
+  mutate(Artist = str_remove_all(Artist, "[:punct:]"),
+         Song = str_remove_all(Song, "[:punct:]")) %>% 
+  mutate(Artist = str_to_lower(Artist, local = "en"),
+         Song = str_to_lower(Song, local = "en")) %>% 
+  mutate(Artist = str_trim(Artist, side = c("both", "left", "right")),
+         Song = str_trim(Song, side = c("both", "left", "right")))
+
+rs_all <- rs_all %>% 
+  mutate(Artist = str_remove_all(Artist, "The"),
+         Song = str_remove_all(Song, "The")) %>% 
+  mutate(Artist = str_replace_all(Artist, "&", "and"),
+         Song = str_replace_all(Song, "&", "and")) %>% 
+  mutate(Artist = str_remove_all(Artist, "[:punct:]"),
+         Song = str_remove_all(Song, "[:punct:]")) %>% 
+  mutate(Artist = str_to_lower(Artist, local = "en"),
+         Song = str_to_lower(Song, local = "en")) %>% 
+  mutate(Artist = str_trim(Artist, side = c("both", "left", "right")),
+         Song = str_trim(Song, side = c("both", "left", "right")))
 
 ### Question 4 ----------
 
@@ -75,7 +119,14 @@ load("rs_data.RData")
 # in the new rs_joined compared to the original. Use nrow to check (there should be 799 rows)
 
 #ANSWER
-
+rs_new_split <- rs_all %>% 
+  filter(Source == "New")
+rs_old_split <- rs_all %>% 
+  filter(Source == "Old")
+# rs_new_split should be the same as re_new; so should rs_old_split
+rs_joined <- full_join(rs_new, rs_old, by = c("Song", "Artist"))
+rs_joined <- full_join(rs_new, rs_old, by = c("Song", "Artist"),suffix = c("_New", "_Old"))
+nrow(rs_joined)
 
 ### Question 5 ----------
 
@@ -88,7 +139,13 @@ load("rs_data.RData")
 # You should now be able to see how each song moved up/down in rankings between the two lists
 
 #ANSWER
-
+rs_joined <- rs_joined %>% 
+  select(-Source_Old, -Source_New) %>% 
+  filter (!(is.na(Rank_New))) %>% 
+  filter (!(is.na(Rank_Old))) %>% 
+  mutate(Rank_Change = Rank_Old - Rank_New) %>% 
+  arrange(Rank_Change)
+  
 
 ### Question 6 ----------
 
@@ -99,8 +156,13 @@ load("rs_data.RData")
 # Which decade improved the most?
 
 #ANSWER
+rs_joined <- rs_joined %>% 
+  mutate(Decade = factor(paste0(floor(Year_New/10)*10,'s')))
 
-
+rs_joined %>% 
+  group_by(Decade) %>% 
+  summarize(mean = mean(Rank_Change))
+# 1970s improved the most
 
 ### Question 7 ----------
 
@@ -110,8 +172,10 @@ load("rs_data.RData")
 # proportion of songs in each of the top three decades (vs. all the rest)
 
 #ANSWER
-
-
+fct_count(rs_joined$Decade)
+rs_joined <- rs_joined %>% 
+  mutate(Decade2 = fct_lump(Decade, n = 3))
+fct_count(rs_joined$Decade2, prop = T)
 
 ### Question 8 ---------- 
 
@@ -120,7 +184,10 @@ load("rs_data.RData")
 # Use parse_date_time to fix it
 
 #ANSWER
+top20 <- read_csv("top_20.csv")
 
+top20 <- top20 %>% 
+  mutate(Release = parse_date_time(Release, orders="%d-%B-%y"))
 
 ### Question 9 --------
 
@@ -129,7 +196,8 @@ load("rs_data.RData")
 # overwrite top20 with the pivoted data (there should now be 20 rows!)
 
 #ANSWER
-
+top20 <- top20 %>% 
+  pivot_wider(names_from = Style, values_from = Value)
 
 
 ### Question 10 ---------
@@ -143,9 +211,16 @@ load("rs_data.RData")
 # Count the number of songs that were released in each season
 
 #ANSWER
+top20 <- left_join (top20, rs_joined, by=c("Artist","Song"))
 
+top20 <- top20 %>% 
+  mutate(month = month(Release,label = T))
 
-
+top20 <- top20 %>% 
+  mutate(season = fct_collapse(month, Spring = c("Mar", "Apr","May"),
+                               Summer = c("Jun","Jul","Aug"),
+                               Fall = c("Sep","Oct","Nov"),
+                               Winter = c("Dec","Jan","Feb")))
 ### Question 11 ---------
 
 # How many songs in the top 20 were major vs. minor? 
@@ -154,6 +229,11 @@ load("rs_data.RData")
 # Figure out which is the top-ranked song (from Rank_New) that used a minor key
 
 #ANSWER
+top20 <- top20 %>% 
+  mutate(Quality = factor(ifelse(str_detect(Key, "m")==T, "Minor", "Major")))
+fct_count(top20$Quality)
 
-
-
+top20 %>% 
+  filter(Quality == "Minor") %>% 
+  arrange(Rank_New) %>% 
+  slice_head(n=1)
